@@ -1,0 +1,22 @@
+# PyInstaller 中间产物
+build/
+*.spec
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 临时 / 测试图
+_*.png
+*_demo_*.png
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
