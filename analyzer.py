@@ -687,6 +687,8 @@ _KW_RULES = [
     (("永恒",),                                     "红", 0.30),
     (("无色",),                                     "白", 0.85),
     (("无情",),                                     "蓝", 0.25),
+    (("雷", "雷暴", "雷神"),                         "黑", 0.35),     # 雷云压顶
+    (("雨", "雨水", "雨神"),                         "蓝", 0.40),     # 雨色
     (("拯救",),                                     "蓝", 0.20),
 ]
 
@@ -757,6 +759,7 @@ def realm_color_recipe(num, name):
 
 # 主题 -> 象征图标：按界名关键词挑一个母题画在图上
 _MOTIF_RULES = [
+    (("雷", "雨", "雷暴", "雷神", "雨神"), "storm"),    # 真天无情界：雷雨雷暴 + 闪电
     (("Amelie", "amelie"),             "amelie"),     # 绿白红 + 小全色检测 + 小黑方块
     (("地狱",),                        "hell"),       # 黑底红点
     (("人间", "人界", "人性", "均衡"), "testcard"),   # 带3=人：电视检测信号（最中·均衡）
@@ -890,7 +893,18 @@ def make_realm_thumbnail(num, name, size=(120, 70)):
     light = (250, 248, 235)
     dark = (15, 15, 15)
 
-    if motif == "sun":
+    if motif == "storm":
+        # 真天无情界：乌云压顶 + 雨丝 + 黄色闪电
+        d.rectangle([0, 0, W, int(H * 0.40)], fill=(38, 46, 62))
+        for rx in range(6, W, 9):
+            d.line([(rx, int(H * 0.42)), (rx - 4, H - 4)], fill=(120, 150, 205), width=1)
+        bolt = [(cx, cy - 15), (cx - 8, cy + 2), (cx - 1, cy + 2), (cx - 6, cy + 16),
+                (cx + 10, cy - 4), (cx + 2, cy - 4)]
+        d.polygon(bolt, fill=(252, 226, 70))
+        d.rectangle([0, 0, W - 1, H - 1], outline=(10, 12, 20))
+        _draw_badge(d, num)
+        return img
+    elif motif == "sun":
         d.ellipse([cx - 12, cy - 12, cx + 12, cy + 12], fill=(255, 225, 90))
         for a in range(0, 360, 45):
             import math

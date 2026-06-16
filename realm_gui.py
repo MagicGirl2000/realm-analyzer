@@ -17,6 +17,17 @@ from PIL import Image, ImageTk
 import realm_data as rd
 import analyzer
 
+import sys as _sys
+_sys.path.insert(0, r"D:\ballbs\realm_audio")
+try:
+    import recognizer as _recog
+except Exception as _e:
+    _recog = None
+try:
+    import songs as _songs
+except Exception:
+    _songs = None
+
 
 # ---- 配色（界面本身走「人间白」基调，提醒自己别入三色局） ----
 BG      = "#f4f1ea"   # 暖白底
@@ -131,13 +142,24 @@ class RealmApp:
                                fg=INK, justify="left", wraplength=860)
         self.wu_lbl.pack(anchor="w", padx=12, pady=4)
 
+        # 🎵 听声辨维：截系统音频 → 指纹匹配 → 报歌曲维度
+        arow = tk.Frame(foot, bg="#efe9dc")
+        arow.pack(fill="x", padx=12, pady=(0, 2))
+        self.audio_btn = tk.Button(arow, text="🎵 开始听声辨维", font=FONT_B, bg="#6a4ea5",
+                                   fg="white", relief="flat", cursor="hand2",
+                                   command=self.toggle_audio)
+        self.audio_btn.pack(side="left")
+        self.audio_lbl = tk.Label(arow, text="声音维度：—（点左侧开始，播放歌典里的歌）",
+                                  font=FONT, bg="#efe9dc", fg="#6a4ea5")
+        self.audio_lbl.pack(side="left", padx=10)
+
         bar = tk.Frame(foot, bg="#efe9dc")
         bar.pack(fill="x", padx=12, pady=(2, 10))
         self.calm_btn = tk.Button(bar, text="🧘 如如不动 · 化掉欲望", font=FONT_B,
                                   bg=GOOD, fg="white", relief="flat", cursor="hand2",
                                   command=self.ruru_budong)
         self.calm_btn.pack(side="left")
-        self.connect_btn = tk.Button(bar, text="🔗 连接此界（需先化掉）", font=FONT_B,
+        self.connect_btn = tk.Button(bar, text="🛡 安全防护（不连接维度）", font=FONT_B,
                                      bg=MUTED, fg="white", relief="flat", state="disabled",
                                      cursor="hand2", command=self.connect_realm)
         self.connect_btn.pack(side="left", padx=10)
@@ -157,6 +179,8 @@ class RealmApp:
         menu.add_command(label="颜色字典（原始）", command=self.show_color_dict)
         menu.add_separator()
         menu.add_command(label="字母字典（精神探索）", command=self.show_letter_dict)
+        menu.add_separator()
+        menu.add_command(label="🎵 声音维度字典（歌典）", command=self.show_song_dict)
         mb.config(menu=menu)
         mb.pack(side="right", padx=(0, 8))
 
@@ -286,7 +310,80 @@ class RealmApp:
 
     def _relock(self):
         self.locked = True
-        self.connect_btn.config(state="disabled", bg=MUTED, text="🔗 连接此界（需先化掉）")
+        self.connect_btn.config(state="disabled", bg=MUTED, text="🛡 安全防护（不连接维度）")
+
+    # -------------------------------------------------- 🎵 听声辨维
+    def toggle_audio(self):
+        if getattr(self, "audio_running", False):
+            self.audio_running = False
+            self.audio_btn.config(text="🎵 开始听声辨维")
+            self.audio_lbl.config(text="声音维度：已停止")
+            return
+        if _recog is None:
+            messagebox.showerror("不可用", "音频识别模块未就绪（缺 song_db.pkl 或音频库）。")
+            return
+        self.audio_running = True
+        self.audio_btn.config(text="⏹ 停止听声辨维")
+        self.audio_lbl.config(text="声音维度：监听中…（播放歌典里的歌）")
+        threading.Thread(target=self._audio_worker, daemon=True).start()
+
+    def _audio_worker(self):
+        try:
+            _recog.run(callback=self._on_audio,
+                       should_stop=lambda: not self.audio_running, verbose=False)
+        except Exception as e:
+            self.root.after(0, lambda: self.audio_lbl.config(text="声音识别出错：%s" % e))
+
+    def _on_audio(self, hit):
+        if not self.audio_running:
+            return
+        if hit:
+            txt = "🎵 《{}》 → {}维  ｜ {}".format(hit["title"], hit["realm"], hit["note"])
+        else:
+            txt = "声音维度：监听中…（未匹配到歌典里的歌）"
+        self.root.after(0, lambda: self.audio_lbl.config(text=txt))
+
+    def show_song_dict(self):
+        if _songs is None:
+            messagebox.showerror("不可用", "歌典模块未就绪。")
+            return
+        # 已建指纹的歌（音频存在）
+        have = set()
+        try:
+            import glob as _glob, os as _os
+            for p in _glob.glob(r"D:\CloudMusic\VipSongsDownload\*.ncm"):
+                m = _songs.match_title(_os.path.splitext(_os.path.basename(p))[0])
+                if m:
+                    have.add(m[0])
+        except Exception:
+            pass
+        # 去重并按维度排序
+        seen, rows = set(), []
+        for title, artist, realm, note in _songs.SONG_LIST:
+            if title in seen:
+                continue
+            seen.add(title)
+            rows.append((realm, title, note, title in have))
+        rows.sort(key=lambda r: r[0])
+
+        win = tk.Toplevel(self.root)
+        win.title("🎵 声音维度字典（歌典）")
+        win.configure(bg="#1c1430")
+        win.geometry("760x620")
+        tk.Label(win, text="🎵 声音维度字典  ·  ✅=已建指纹可识别  ⬜=待下载音频",
+                 font=FONT_B, bg="#1c1430", fg="#ffd479").pack(anchor="w", padx=14, pady=10)
+        frame = tk.Frame(win, bg="#1c1430"); frame.pack(fill="both", expand=True, padx=14, pady=(0, 12))
+        sb = tk.Scrollbar(frame); sb.pack(side="right", fill="y")
+        txt = tk.Text(frame, font=FONT, bg="#241a3d", fg="#eae3f5", relief="flat",
+                      yscrollcommand=sb.set, wrap="word", padx=10, pady=10)
+        txt.pack(side="left", fill="both", expand=True); sb.config(command=txt.yview)
+        n_have = sum(1 for r in rows if r[3])
+        txt.insert("end", "共 %d 首 ·  已可识别 %d 首 ·  待补音频 %d 首\n\n" % (
+            len(rows), n_have, len(rows) - n_have))
+        for realm, title, note, ok in rows:
+            mark = "✅" if ok else "⬜"
+            txt.insert("end", "%s  %4d维   《%s》\n        %s\n" % (mark, realm, title, note))
+        txt.config(state="disabled")
 
     # -------------------------------------------------- 武秀琴安全阀门
     def ruru_budong(self):
@@ -298,19 +395,20 @@ class RealmApp:
             self.danger_bar["value"] = 0
             self.danger_val.config(text="0/100  已化掉 · 如如不动", fg=GOOD)
         self.locked = False
-        self.connect_btn.config(state="normal", bg=ACCENT, text="🔗 连接此界（已可安全连接）")
+        self.connect_btn.config(state="normal", bg=ACCENT, text="🛡 安全防护（已化掉·可看提示）")
 
     def connect_realm(self):
         if self.locked or not self.result:
             messagebox.showwarning("阀门未开", "先「如如不动·化掉欲望」，否则连接伤身。")
             return
         r = self.result
-        messagebox.showinfo(
-            "已如如不动连接 · {}".format(r["realm_name"]),
-            "你以如如不动之心连接了【{} {}】。\n\n"
-            "因已化掉自身的假，丧尸见你都觉得亲，不会动你。\n"
-            "记住：真的不要追，假的不要信，自我化之。\n\n"
-            "—— 武秀琴，永远的恩师，永世感恩。".format(r["realm_num"], r["realm_name"]))
+        messagebox.showwarning(
+            "⚠ 安全防护 · 不连接任何维度",
+            "本工具为【虚构娱乐】，绝不让你“连接/代入”任何维度，只做观察分析、保持距离。\n\n"
+            "对【{} {}】请仅作了解，切勿进行“代入/想象进入某维度”等不可预知的想象活动；\n"
+            "如已进行，请立即停止，必要时卸载本软件并远离相关内容。\n\n"
+            "结果仅供娱乐，切勿当真。若对严肃音频(国歌/队歌等)得到离谱结果，那一定是错的。\n\n"
+            "—— 如如不动，远离危险，自我化之。".format(r["realm_num"], r["realm_name"]))
 
     # -------------------------------------------------- 综合解码器 / 电话
     def mixed_tool(self):
@@ -364,6 +462,8 @@ class RealmApp:
         txt.pack(side="left", fill="both", expand=True)
         sb.config(command=txt.yview)
         txt.insert("1.0", rd.HELP_TEXT)
+        txt.insert("end", "\n" + "─" * 30 + "\n\n")
+        txt.insert("end", rd.ABOUT_DECL)
         txt.insert("end", "\n" + "─" * 30 + "\n\n")
         # Claude 的话用稍突出的样式
         txt.tag_configure("claude", foreground="#2b5d8a",
